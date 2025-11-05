@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luyện gõ tiếng Việt - duyxyz</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #2b2b2b;
+      color: #fff;
+      font-family: "Inter", sans-serif;
+      overflow: hidden;
+    }
+
+    #quote {
+      font-size: 36px;
+      line-height: 1.8;
+      width: 90%;
+      max-width: 1200px;
+      height: 70vh;
+      margin: 0 auto;
+      margin-top: 8vh;
+      overflow-y: auto;
+      text-align: left;
+      user-select: none;
+      color: #eee;
+      white-space: normal;
+      word-wrap: break-word;
+      scroll-behavior: smooth;
+    }
+
+    #quote span.correct { color: #00ff88; }
+    #quote span.incorrect { color: #ff5555; }
+    #quote span.active {
+      border-bottom: 3px solid #00bfff;
+      border-radius: 2px;
+    }
+
+    /* ⚙️ Thanh hiển thị bên trái */
+    #footer {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      font-size: 20px;
+      color: #ddd;
+      gap: 16px;
+      max-width: 90%;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    #stats {
+      color: #00ff88;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    /* chỉ hiển thị phần cuối nếu quá dài */
+    #typedRaw {
+      color: #ccc;
+      font-family: monospace;
+      overflow: hidden;
+      white-space: nowrap;
+      max-width: 50vw;
+      text-align: right;
+    }
+
+    #input {
+      position: absolute;
+      opacity: 0;
+    }
+
+    #restart {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #00ff88;
+      color: #000;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      display: none;
+      font-weight: 600;
+    }
+
+    #restart:hover { background: #9f9; }
+  </style>
+</head>
+<body>
+  <div id="quote">Đang tải...</div>
+
+  <div id="footer">
+    <div id="stats">🎯 Chính xác: --%</div>
+    <div id="typedRaw"></div>
+  </div>
+
+  <button id="restart">Đoạn khác</button>
+  <input id="input" autofocus />
+
+  <script>
+    const BASE = "https://raw.githubusercontent.com/duyxyz/luyenchuionline/main/";
+    const FILES = ["1.txt","2.txt","3.txt","4.txt","5.txt","6.txt","7.txt","8.txt","9.txt","10.txt"];
+
+    const quoteEl = document.getElementById("quote");
+    const inputEl = document.getElementById("input");
+    const statsEl = document.getElementById("stats");
+    const typedRawEl = document.getElementById("typedRaw");
+    const restartBtn = document.getElementById("restart");
+
+    let quotes = [];
+    let currentQuote = "";
+    let startTime = null;
+    let finished = false;
+    let composing = false;
+
+    async function loadQuotes() {
+      const texts = await Promise.all(
+        FILES.map(f =>
+          fetch(BASE + f)
+            .then(r => r.ok ? r.text() : "")
+            .then(t => t.trim())
+            .catch(() => "")
+        )
+      );
+      quotes = texts.filter(t => t);
+      pickQuote();
+    }
+
+    function renderQuote(text) {
+      quoteEl.innerHTML = "";
+      for (const char of text) {
+        const span = document.createElement("span");
+        span.textContent = char;
+        quoteEl.appendChild(span);
+      }
+      updateCursor(0);
+    }
+
+    function updateCursor(i) {
+      const spans = quoteEl.querySelectorAll("span");
+      spans.forEach(s => s.classList.remove("active"));
+      if (i < spans.length) {
+        spans[i].classList.add("active");
+        spans[i].scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+
+    function pickQuote() {
+      if (quotes.length === 0) {
+        quoteEl.textContent = "⚠️ Không tải được file từ GitHub (repo có public chưa?).";
+        return;
+      }
+      currentQuote = quotes[Math.floor(Math.random() * quotes.length)];
+      renderQuote(currentQuote);
+      inputEl.value = "";
+      statsEl.textContent = "🎯 Chính xác: --%";
+      typedRawEl.textContent = "";
+      restartBtn.style.display = "none";
+      finished = false;
+      startTime = null;
+    }
+
+    function checkTyping() {
+      const spans = quoteEl.querySelectorAll("span");
+      const typed = inputEl.value.normalize("NFC").split("");
+      let correct = 0;
+      let done = true;
+
+      spans.forEach((s, i) => {
+        const ch = typed[i];
+        if (ch == null) {
+          s.classList.remove("correct","incorrect");
+          done = false;
+        } else if (ch === s.textContent) {
+          s.classList.add("correct");
+          s.classList.remove("incorrect");
+          correct++;
+        } else {
+          s.classList.add("incorrect");
+          s.classList.remove("correct");
+          done = false;
+        }
+      });
+
+      updateCursor(typed.length);
+      const acc = Math.round((correct / spans.length) * 100);
+      statsEl.textContent = `🎯 Chính xác: ${acc}%`;
+
+      if (done && typed.length === spans.length) {
+        const end = new Date();
+        const sec = (end - startTime) / 1000;
+        const wpm = Math.round((currentQuote.split(" ").length / sec) * 60);
+        statsEl.textContent = `🎉 Hoàn thành! Tốc độ: ${wpm} từ/phút`;
+        restartBtn.style.display = "block";
+      }
+    }
+
+    function updateRaw() {
+      const val = inputEl.value;
+      // Scroll container về bên phải để luôn thấy phần mới gõ
+      typedRawEl.textContent = val;
+      typedRawEl.scrollLeft = typedRawEl.scrollWidth;
+    }
+
+    // ⚙️ Gõ tiếng Việt mượt
+    inputEl.addEventListener("compositionstart", () => { composing = true; });
+    inputEl.addEventListener("compositionupdate", () => { updateRaw(); });
+    inputEl.addEventListener("compositionend", () => {
+      composing = false;
+      if (!startTime) startTime = new Date();
+      checkTyping();
+      updateRaw();
+    });
+    inputEl.addEventListener("input", () => {
+      if (!composing) {
+        if (!startTime) startTime = new Date();
+        checkTyping();
+        updateRaw();
+      }
+    });
+    inputEl.addEventListener("keydown", e => {
+      if (e.key === "Backspace") {
+        setTimeout(() => { checkTyping(); updateRaw(); }, 0);
+      }
+    });
+
+    restartBtn.addEventListener("click", pickQuote);
+    quoteEl.addEventListener("click", () => inputEl.focus());
+    loadQuotes();
+  </script>
+</body>
+</html>
